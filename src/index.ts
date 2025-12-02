@@ -582,7 +582,7 @@ class SignalManager {
 
       step0: [
         [
-          { text: "🇦🇪 𝓐𝓔𝓓 / 𝓒𝓝𝓨 🇨🇳 (OTC)", callback_data: "AED/CNY (OTC)" },
+          { text: "🇦🇪 AED / CNY 🇨🇳 (OTC)", callback_data: "AED/CNY (OTC)" },
           { text: "🇦🇺 AUD / CAD 🇨🇦 (OTC)", callback_data: "AUD/CAD (OTC)" },
         ],
         [
