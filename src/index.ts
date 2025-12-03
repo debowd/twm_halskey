@@ -507,7 +507,7 @@ class Session {
             const lastController = botManager.getLastAdmin();
             console.log("Sending message for ", cronJob.cron_id);
             await sessionManager.endSession(lastController as ChatId);
-          }, { timezone: cronJob.timezone });
+          }, { name: cronJob.cron_id, timezone: cronJob.timezone });
   
         } else if (cronJob.cron_id === "day_end") {
           
@@ -515,7 +515,7 @@ class Session {
             const lastController = botManager.getLastAdmin();
             console.log("Sending message for ", cronJob.cron_id);
             await sessionManager.endDay(lastController as ChatId)
-          }, { timezone: cronJob.timezone });
+          }, { name: cronJob.cron_id, timezone: cronJob.timezone });
   
         } else {
           if (cronPosts.length !== 0) {
@@ -554,7 +554,7 @@ class Session {
                 await botManager.sendMessageByType(modifiedDBPost, channelId);
               }
             
-            }, { timezone: cronJob.timezone });
+            }, { name: cronJob.cron_id, timezone: cronJob.timezone });
           }
         }
       });
@@ -1976,6 +1976,171 @@ bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
     });
 
     bot.editMessageText(`✅ Milestone celebration posted!`, {
+      chat_id: chatId,
+      message_id: messageId
+    });
+  }
+});
+
+// /manual - Send scheduled messages manually
+bot.onText(/\/manual/, async (msg: TelegramBot.Message) => {
+  const chatId = msg.from?.id;
+  const authorized = authorize(chatId as ChatId);
+
+  if (!authorized) {
+    bot.sendMessage(chatId as ChatId, "You are not authorized to use this bot");
+    return;
+  }
+
+  const presentSession = sessionManager.getPresentSession();
+
+  let manualMsg = `<strong>📋 MANUAL POST MENU</strong>\n\n`;
+  manualMsg += `Current Session: <strong>${presentSession}</strong>\n\n`;
+  manualMsg += `Choose a message to send:`;
+
+  const keyboard = [
+    [
+      { text: "🌑 Overnight Start", callback_data: "manual_gen_info_night" },
+      { text: "🌅 Morning Start", callback_data: "manual_gen_info_morning" }
+    ],
+    [
+      { text: "☀️ Afternoon Start", callback_data: "manual_gen_info_noon" },
+      { text: "🔔 Get Ready", callback_data: "manual_get_ready" }
+    ],
+    [
+      { text: "📝 Session End Report", callback_data: "manual_session_end" },
+      { text: "📊 Day End Report", callback_data: "manual_day_end" }
+    ],
+    [
+      { text: "📈 Weekly Report", callback_data: "manual_week_report" }
+    ],
+    [{ text: "Cancel", callback_data: "cancel_op" }]
+  ];
+
+  bot.sendMessage(chatId as ChatId, manualMsg, {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: keyboard }
+  }).then(sentMessage => {
+    botManager.setLastBotMessageId(chatId as ChatId, sentMessage.message_id);
+  });
+});
+
+// Handle manual post callbacks
+bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
+  const action = callbackQuery.data;
+  const chatId = callbackQuery.message?.chat.id;
+  const messageId = callbackQuery.message?.message_id;
+
+  if (!action?.startsWith("manual_")) return;
+
+  const authorized = authorize(chatId as ChatId);
+  if (!authorized) return;
+
+  const postType = action.replace("manual_", "");
+
+  // Confirmation message
+  let confirmMsg = `<strong>⚠️ CONFIRM SEND</strong>\n\n`;
+  confirmMsg += `You're about to send: <strong>${postType.replace(/_/g, ' ').toUpperCase()}</strong>\n\n`;
+  confirmMsg += `This will be posted to the channel immediately.\n`;
+  confirmMsg += `Are you sure?`;
+
+  bot.editMessageText(confirmMsg, {
+    chat_id: chatId,
+    message_id: messageId,
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Yes, Send", callback_data: `confirm_manual_${postType}` },
+          { text: "❌ Cancel", callback_data: "cancel_op" }
+        ]
+      ]
+    }
+  });
+});
+
+// Handle confirmed manual sends
+bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
+  const action = callbackQuery.data;
+  const chatId = callbackQuery.message?.chat.id;
+  const messageId = callbackQuery.message?.message_id;
+
+  if (!action?.startsWith("confirm_manual_")) return;
+
+  const authorized = authorize(chatId as ChatId);
+  if (!authorized) return;
+
+  const postType = action.replace("confirm_manual_", "");
+
+  try {
+    // Handle session/day reports
+    if (postType === "session_end") {
+      await sessionManager.endSession(chatId as ChatId, true);
+      bot.editMessageText("✅ Session end flow started!", {
+        chat_id: chatId,
+        message_id: messageId
+      });
+      return;
+    }
+
+    if (postType === "day_end") {
+      await sessionManager.endDay(chatId as ChatId);
+      bot.editMessageText("✅ Day end report sent!", {
+        chat_id: chatId,
+        message_id: messageId
+      });
+      return;
+    }
+
+    if (postType === "week_report") {
+      const weekReportText = await sessionManager.analysePastWeek();
+      await bot.sendMessage(channelId, weekReportText, { parse_mode: "HTML" });
+      bot.editMessageText("✅ Weekly report sent!", {
+        chat_id: chatId,
+        message_id: messageId
+      });
+      return;
+    }
+
+    // Handle image-based posts (gen_info_*, get_ready)
+    const cronPosts = await db.getChannelCronPosts();
+    const cronToPost = cronPosts.find(pst => pst.message_id === postType);
+
+    if (cronToPost) {
+      let modifiedDBPost: WTS = {
+        name: cronToPost.name || "",
+        id: cronToPost.message_id,
+        text: cronToPost.text
+      };
+
+      if (cronToPost.video) {
+        modifiedDBPost.video = messageVideoDetails;
+      }
+
+      if (cronToPost.image) {
+        const imageFile = sessionManager.fileToUse[postType] || `${postType}.jpg`;
+        modifiedDBPost.image = join(__dirname, '../media/imgs/brand/', imageFile);
+      }
+
+      if (cronToPost.replyMarkup) {
+        modifiedDBPost.reply_markup = cronToPost.replyMarkup;
+      }
+
+      await botManager.sendMessageByType(modifiedDBPost, channelId);
+      bot.editMessageText(`✅ ${postType.replace(/_/g, ' ').toUpperCase()} sent!`, {
+        chat_id: chatId,
+        message_id: messageId
+      });
+    } else {
+      bot.editMessageText("❌ Post template not found in database.", {
+        chat_id: chatId,
+        message_id: messageId
+      });
+    }
+
+  } catch (error) {
+    console.error("Error sending manual post:", error);
+    bot.editMessageText("❌ Error sending post. Check logs.", {
       chat_id: chatId,
       message_id: messageId
     });
