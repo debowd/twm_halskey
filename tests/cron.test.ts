@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+'use strict';
+
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import cron from 'node-cron';
 
 describe('Cron Expression Validation', () => {
@@ -56,7 +58,7 @@ describe('Cron Scheduling', () => {
     }).not.toThrow();
   });
 
-  it('should schedule with timezone option (tz)', () => {
+  it('should schedule with timezone option', () => {
     const mockCallback = vi.fn();
 
     expect(() => {
@@ -88,12 +90,11 @@ describe('Cron Scheduling', () => {
 });
 
 describe('Cron Task Creation', () => {
-  it('should create task with scheduled: false option', () => {
+  it('should create task successfully', () => {
     const mockCallback = vi.fn();
 
     const task = cron.schedule('0 0 31 2 *', mockCallback, {
-      name: 'no-autostart-test',
-      scheduled: false // Don't auto-start
+      name: 'creation-test'
     });
 
     expect(task).toBeDefined();
@@ -104,8 +105,7 @@ describe('Cron Task Creation', () => {
     const mockCallback = vi.fn();
 
     const task = cron.schedule('* * * * *', mockCallback, {
-      name: 'start-stop-test',
-      scheduled: false
+      name: 'start-stop-test'
     });
 
     expect(() => task.start()).not.toThrow();
@@ -138,8 +138,7 @@ describe('Trading Session Cron Scenarios', () => {
       expect(() => {
         const task = cron.schedule(expression, mockCallback, {
           name,
-          timezone: 'Europe/London',
-          scheduled: false
+          timezone: 'Europe/London'
         });
         tasks.push(task);
       }).not.toThrow();
@@ -162,12 +161,11 @@ describe('Timezone Handling', () => {
   it('should accept valid timezones', () => {
     const mockCallback = vi.fn();
 
-    validTimezones.forEach(tz => {
+    validTimezones.forEach(timezone => {
       expect(() => {
         const task = cron.schedule('0 0 * * *', mockCallback, {
-          name: `tz-test-${tz}`,
-          tz,
-          scheduled: false
+          name: `tz-test-${timezone}`,
+          timezone
         });
         task.stop();
       }).not.toThrow();

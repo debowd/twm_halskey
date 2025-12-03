@@ -64,8 +64,8 @@ const messageVideoDetails = {
 
 const db = new Database("tradewithmatthew");
 
-const channelId: ChatId = db.getChannelId();
-// const channelId: ChatId = Number(process.env.ATOMIX); //test
+// const channelId: ChatId = db.getChannelId();
+const channelId: ChatId = Number(process.env.ATOMIX); //test
 
 class Session {
   history: SignalHistory;
@@ -1994,19 +1994,51 @@ bot.onText(/\/manual/, async (msg: TelegramBot.Message) => {
 
   const presentSession = sessionManager.getPresentSession();
 
+  // Fetch both cron schedules and posts from database
+  const [cronJobs, cronPosts] = await Promise.all([
+    db.getChannelCrons(),
+    db.getChannelCronPosts()
+  ]);
+
   let manualMsg = `<strong>📋 MANUAL POST MENU</strong>\n\n`;
   manualMsg += `Current Session: <strong>${presentSession}</strong>\n\n`;
   manualMsg += `Choose a message to send:`;
 
+  // Build keyboard from cron jobs (schedules)
+  const postButtons: TelegramBot.InlineKeyboardButton[][] = [];
+  const postRow: TelegramBot.InlineKeyboardButton[] = [];
+
+  // Get unique cron_ids (excluding session_end and day_end which are handled separately)
+  const scheduledPosts = cronJobs.filter(job =>
+    job.cron_id !== 'session_end' && job.cron_id !== 'day_end'
+  );
+
+  scheduledPosts.forEach((job, index) => {
+    // Find the matching post content if available
+    const matchingPost = cronPosts.find(p => p.message_id === job.cron_id);
+
+    const emoji = job.cron_id.includes('night') || job.cron_id.includes('overnight') ? '🌑' :
+                  job.cron_id.includes('morning') ? '🌅' :
+                  job.cron_id.includes('noon') || job.cron_id.includes('afternoon') ? '☀️' :
+                  job.cron_id.includes('ready') ? '🔔' :
+                  job.cron_id.includes('start') ? '▶️' : '📄';
+
+    const displayName = matchingPost?.name || job.name || job.cron_id.replace(/_/g, ' ');
+
+    postRow.push({
+      text: `${emoji} ${displayName}`,
+      callback_data: `manual_${job.cron_id}`
+    });
+
+    if (postRow.length === 2 || index === scheduledPosts.length - 1) {
+      postButtons.push([...postRow]);
+      postRow.length = 0;
+    }
+  });
+
+  // Add report options
   const keyboard = [
-    [
-      { text: "🌑 Overnight Start", callback_data: "manual_gen_info_night" },
-      { text: "🌅 Morning Start", callback_data: "manual_gen_info_morning" }
-    ],
-    [
-      { text: "☀️ Afternoon Start", callback_data: "manual_gen_info_noon" },
-      { text: "🔔 Get Ready", callback_data: "manual_get_ready" }
-    ],
+    ...postButtons,
     [
       { text: "📝 Session End Report", callback_data: "manual_session_end" },
       { text: "📊 Day End Report", callback_data: "manual_day_end" }

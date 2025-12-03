@@ -1,13 +1,24 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Node.js dependencies
-/node_modules
+node_modules/
+
+# Build output
+build/
+dist/
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
+pnpm-debug.log*
 
-# Optional npm cache directory
+# Package manager
 .npm
+.pnpm-store/
 
 # Optional eslint cache
 .eslintcache
@@ -27,7 +38,26 @@ npm-debug.log*
 # OS-specific files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Optional coverage directory
+# Test coverage
 coverage/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Media uploads (keep brand assets)
+media/imgs/*.png
+media/imgs/*.jpg
+!media/imgs/brand/
+
+# Deployment
 .vercel
+.netlify
+
+# WhatsApp images (temporary)
+WhatsApp*.jpg
+WhatsApp*.png
