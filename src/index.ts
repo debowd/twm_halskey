@@ -1642,33 +1642,7 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
 
       const ARI = climaxPostOnCreation.awaitingResultImage();
       const PSR = climaxPostOnCreation.presentSignalResult();
-      const isWin = PSR.includes("WIN");
 
-      // Check if there's a notable streak to show
-      const streak = await db.getCurrentStreak();
-      const hasNotableStreak = isWin && streak.type === 'win' && streak.count >= 3;
-
-      if (hasNotableStreak) {
-        // Ask admin if they want to include streak
-        const streakQuestion = `🔥 You have a <strong>${streak.count} WIN STREAK!</strong>\n\nDo you want to include this in the result post?`;
-
-        bot.sendMessage(chatId as ChatId, streakQuestion, {
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "✅ Yes, include streak", callback_data: "result_with_streak" },
-                { text: "❌ No, just result", callback_data: "result_without_streak" }
-              ]
-            ]
-          }
-        }).then(sentMessage => {
-          botManager.setLastBotMessageId(chatId as ChatId, sentMessage.message_id);
-        });
-        return;
-      }
-
-      // No notable streak, post result directly
       if (ARI) {
         console.log("About to send result with image...");
         const resultType = climaxPostOnCreation.presentSignalResult();
@@ -1697,46 +1671,6 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
         }, "Result posted successfully...");
       }
 
-      botManager.setLastAdmin(chatId as ChatId);
-    }
-
-    // Handle streak inclusion choice
-    if (action === "result_with_streak" || action === "result_without_streak") {
-      const includeStreak = action === "result_with_streak";
-      const ARI = climaxPostOnCreation.awaitingResultImage();
-      const PSR = climaxPostOnCreation.presentSignalResult();
-
-      let streakMsg = '';
-      if (includeStreak) {
-        const streak = await db.getCurrentStreak();
-        streakMsg = `\n\n🔥 <strong>${streak.count} WINS IN A ROW!</strong> 🔥`;
-      }
-
-      if (ARI) {
-        const resultType = climaxPostOnCreation.presentSignalResult();
-        const resultTypeDefined = resultType === resultManager.callLossType1() ? resultManager.callLossType2() : PSR;
-        const resultImage = climaxPostOnCreation.resultImagePath();
-        const resultImageStream = createReadStream(resultImage);
-
-        bot.deleteMessage(chatId as ChatId, botManager.lastBotMessageId(chatId as ChatId)).then(async () => {
-          if (resultImage !== undefined) {
-            bot.sendPhoto(channelId, resultImageStream, {
-              caption: resultTypeDefined + streakMsg,
-              parse_mode: "HTML"
-            }).then(() => bot.sendMessage(chatId as ChatId, "Result posted successfully..."));
-          }
-        });
-
-      } else {
-        bot.deleteMessage(chatId as ChatId, botManager.lastBotMessageId(chatId as ChatId)).then(() => {
-          bot.sendMessage(channelId, PSR + streakMsg, {
-            parse_mode: "HTML"
-          }).then(() => bot.sendMessage(chatId as ChatId, "Result posted successfully..."));
-        });
-      }
-
-      climaxPostOnCreation.setState("awaitingResultImage", false);
-      climaxPostOnCreation.setState("resultImagePath", "");
       botManager.setLastAdmin(chatId as ChatId);
     }
   } else {
