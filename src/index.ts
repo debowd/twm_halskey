@@ -1962,24 +1962,27 @@ const buildInfoMessage = async (section: string, chatId: ChatId): Promise<{ text
   }
 
   else if (section === 'channels') {
+    const prodChannelLink = await getChannelLink(db.getChannelId());
+    const testChannelLink = process.env.ATOMIX ? await getChannelLink(Number(process.env.ATOMIX)) : 'Not set';
+
     text = `<strong>📡 CHANNEL CONFIGURATION</strong>\n\n`;
 
-    text += `<strong>Current Setup:</strong>\n`;
-    text += `├ Mode: ${isDev ? '🧪 TEST' : '🔴 PRODUCTION'}\n`;
-    text += `├ Posting to: ${postingChannel}\n`;
-    text += `├ Test Channel: ${testChannel}\n`;
-    text += `└ DB Channel ID: <code>${db.getChannelId()}</code>\n\n`;
+    text += `<strong>Current Mode:</strong> ${isDev ? '🧪 DEVELOPMENT' : '🔴 PRODUCTION'}\n\n`;
 
-    text += `<strong>ℹ️ How it works:</strong>\n`;
-    text += `• All signals & posts go to the "Posting to" channel\n`;
-    text += `• Database stores results linked to DB Channel ID\n`;
-    text += `• Switch modes by editing code (index.ts:67-68)\n\n`;
+    text += `<strong>📤 Posting to:</strong>\n`;
+    text += `└ ${postingChannel} (<code>${channelId}</code>)\n\n`;
 
-    text += `<strong>⚠️ To switch modes:</strong>\n`;
-    text += `<code>// Production:\n`;
-    text += `const channelId = db.getChannelId();\n\n`;
-    text += `// Test:\n`;
-    text += `const channelId = Number(process.env.ATOMIX);</code>`;
+    text += `<strong>🔴 Production Channel:</strong>\n`;
+    text += `└ ${prodChannelLink} (<code>${db.getChannelId()}</code>)\n\n`;
+
+    text += `<strong>🧪 Test Channel (ATOMIX):</strong>\n`;
+    text += `└ ${testChannelLink} (<code>${process.env.ATOMIX || 'Not set'}</code>)\n\n`;
+
+    text += `<strong>⚙️ How to switch:</strong>\n`;
+    text += `<code>pnpm dev</code> → Test mode\n`;
+    text += `<code>pnpm start</code> → Production mode\n\n`;
+
+    text += `<i>Or set NODE_ENV=dev/prod</i>`;
   }
 
   const keyboard: TelegramBot.InlineKeyboardButton[][] = [
