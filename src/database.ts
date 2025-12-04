@@ -34,9 +34,8 @@ class Database {
             getRecentSignalsForStreak: `SELECT result FROM signals WHERE telegram_id = $1 AND result IS NOT NULL ORDER BY time_stamp DESC LIMIT 50`
         }
 
-        this.channelId = -1002034301016;
-        // this.channelId = -1002101961419;
-        // this.initializeChannelId(channelName);
+        // Production channel from env, fallback to hardcoded
+        this.channelId = Number(process.env.CHANNEL) || -1002101961419;
     }
 
     private initializeChannelId = async (channelName: string): Promise<number> => {
