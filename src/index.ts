@@ -35,7 +35,8 @@ const app: Express = express();
 const port: number = Number(process.env.PORT) || 3000;
 
 // Environment-based configuration
-const isDev = process.env.NODE_ENV !== 'production';
+const nodeEnv = process.env.NODE_ENV?.toLowerCase() || 'development';
+const isDev = !['production', 'prod'].includes(nodeEnv);
 const token: string | undefined = isDev ? process.env.TEST_BOT_TOKEN : process.env.BOT_TOKEN;
 
 if (!token) {
@@ -1877,7 +1878,7 @@ const buildInfoMessage = async (section: string, chatId: ChatId): Promise<{ text
 
   if (section === 'overview') {
     text = `<strong>🤖 TWM SIGNAL BOT</strong>\n`;
-    text += `<i>v2.6.0 • ${isDev ? '🧪 Test Mode' : '🔴 Production'}</i>\n\n`;
+    text += `<i>v2.7.0 • ${isDev ? '🧪 Test Mode' : '🔴 Production'}</i>\n\n`;
 
     text += `<strong>📡 Posting to:</strong> ${postingChannel}\n`;
     text += `<strong>⏰ Session:</strong> ${presentSession || 'None active'}\n`;
@@ -2380,10 +2381,10 @@ bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
 sessionManager.scheduleClimaxCrons();
 
 app.get("/", (req, res) => {
-    res.send("Halskey v2.6.0 for TWM is running...");
+    res.send("Halskey v2.7.0 for TWM is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey v2.6.0 for TWM is running...");
+    console.log("Halskey v2.7.0 for TWM is running...");
 });
 
