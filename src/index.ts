@@ -34,11 +34,15 @@ const __dirname = dirname(__filename);
 const app: Express = express();
 const port: number = Number(process.env.PORT) || 3000;
 
-const token: string | undefined = process.env.BOT_TOKEN;
+// Environment-based configuration
+const isDev = process.env.NODE_ENV !== 'production';
+const token: string | undefined = isDev ? process.env.TEST_BOT_TOKEN : process.env.BOT_TOKEN;
 
 if (!token) {
-  throw new Error("BOT_TOKEN is not defined");
+  throw new Error(isDev ? "TEST_BOT_TOKEN is not defined" : "BOT_TOKEN is not defined");
 }
+
+console.log(`🚀 Starting in ${isDev ? '🧪 DEVELOPMENT' : '🔴 PRODUCTION'} mode`);
 
 const bot: TelegramBot = new TelegramBot(token, {
   filepath: false,
@@ -64,8 +68,20 @@ const messageVideoDetails = {
 
 const db = new Database("tradewithmatthew");
 
-// const channelId: ChatId = db.getChannelId();
-const channelId: ChatId = Number(process.env.ATOMIX); //test
+// Channel: ATOMIX (test) in dev, TWM channel in production
+const getChannelId = (): ChatId => {
+  if (isDev) {
+    if (!process.env.ATOMIX) {
+      console.warn('⚠️ ATOMIX not set in .env, falling back to production channel');
+      return db.getChannelId();
+    }
+    return Number(process.env.ATOMIX);
+  }
+  return db.getChannelId();
+};
+
+const channelId: ChatId = getChannelId();
+console.log(`📡 Posting to channel: ${channelId}`);
 
 class Session {
   history: SignalHistory;
@@ -1529,8 +1545,8 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
 
       const keyboard = [
         [
-          { text: "🟩 𝓑𝓤𝓨", callback_data: "direction_up" },
-          { text: "🟥 SELL ", callback_data: "direction_down" }
+          { text: "🟩 BUY", callback_data: "direction_up" },
+          { text: "🟥 SELL", callback_data: "direction_down" }
         ],
         [{ text: "◀ Back", callback_data: "hour_0" }],
       ];
@@ -1539,7 +1555,7 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
     }
 
     if (action === "direction_up" || action === "direction_down") {
-      signalManager.setDirection((action === "direction_up") ? "🟩 𝓑𝓤𝓨" : "🟥 SELL");
+      signalManager.setDirection((action === "direction_up") ? "🟩 BUY" : "🟥 SELL");
       signalManager.setLastStep(action);
 
       const SIGNAL = signalManager.presentSignal();
@@ -1837,6 +1853,186 @@ bot.onText(/\/stats/, async (msg: TelegramBot.Message) => {
     console.error("Error fetching stats:", error);
     bot.sendMessage(chatId as ChatId, "Error fetching stats. Please try again.");
   }
+});
+
+// /info - Bot guide and status
+const getChannelLink = async (id: ChatId): Promise<string> => {
+  try {
+    const chat = await bot.getChat(id);
+    if (chat.username) return `@${chat.username}`;
+    if (chat.title) return chat.title;
+    return String(id);
+  } catch {
+    return String(id);
+  }
+};
+
+const buildInfoMessage = async (section: string, chatId: ChatId): Promise<{ text: string; keyboard: TelegramBot.InlineKeyboardButton[][] }> => {
+  const presentSession = sessionManager.getPresentSession();
+
+  const postingChannel = await getChannelLink(channelId);
+  const testChannel = process.env.ATOMIX ? await getChannelLink(Number(process.env.ATOMIX)) : 'Not set';
+
+  let text = '';
+
+  if (section === 'overview') {
+    text = `<strong>🤖 TWM SIGNAL BOT</strong>\n`;
+    text += `<i>v2.6.0 • ${isDev ? '🧪 Test Mode' : '🔴 Production'}</i>\n\n`;
+
+    text += `<strong>📡 Posting to:</strong> ${postingChannel}\n`;
+    text += `<strong>⏰ Session:</strong> ${presentSession || 'None active'}\n`;
+    text += `<strong>👤 Your ID:</strong> <code>${chatId}</code>\n\n`;
+
+    text += `<strong>━━━ QUICK START ━━━</strong>\n\n`;
+    text += `1️⃣ Use /start to post a new signal\n`;
+    text += `2️⃣ Use /result after signal expires\n`;
+    text += `3️⃣ Bot auto-posts scheduled messages\n\n`;
+
+    text += `<i>Select a section below to learn more:</i>`;
+  }
+
+  else if (section === 'signals') {
+    text = `<strong>📊 SIGNAL COMMANDS</strong>\n\n`;
+
+    text += `<strong>/start</strong> - Post a new signal\n`;
+    text += `<blockquote>Flow: Select pair → Hour → Minute → Direction → Confirm → Posted!</blockquote>\n\n`;
+
+    text += `<strong>/result</strong> - Update signal outcome\n`;
+    text += `<blockquote>Flow: Shows last signal → Select WIN (M0-M3) or LOSS → Updates channel</blockquote>\n\n`;
+
+    text += `<strong>🔄 Signal Flow Example:</strong>\n`;
+    text += `<code>/start</code>\n`;
+    text += `  ↓ Pick currency (EUR/USD)\n`;
+    text += `  ↓ Pick hour (14)\n`;
+    text += `  ↓ Pick minute (30)\n`;
+    text += `  ↓ Pick direction (BUY/SELL)\n`;
+    text += `  ↓ Confirm ✅\n`;
+    text += `  ↓ Signal posted to channel!\n\n`;
+
+    text += `<code>/result</code>\n`;
+    text += `  ↓ See signal summary\n`;
+    text += `  ↓ Pick: WIN M0/M1/M2/M3 or LOSS\n`;
+    text += `  ↓ Result posted to channel!`;
+  }
+
+  else if (section === 'scheduled') {
+    text = `<strong>⏰ SCHEDULED POSTS</strong>\n\n`;
+
+    text += `<strong>/manual</strong> - Send scheduled messages manually\n`;
+    text += `<blockquote>Sends session starts, get ready alerts, and reports on demand</blockquote>\n\n`;
+
+    text += `<strong>🔄 Manual Post Flow:</strong>\n`;
+    text += `<code>/manual</code>\n`;
+    text += `  ↓ See list of all scheduled posts\n`;
+    text += `  ↓ Select one to send\n`;
+    text += `  ↓ Confirm sending\n`;
+    text += `  ↓ Posted to channel!\n\n`;
+
+    text += `<strong>📋 Auto-Scheduled Messages:</strong>\n`;
+    text += `├ 🌑 Overnight session start\n`;
+    text += `├ 🌅 Morning session start\n`;
+    text += `├ ☀️ Afternoon session start\n`;
+    text += `├ 🔔 Get ready alerts\n`;
+    text += `├ 📝 Session end reports\n`;
+    text += `└ 📊 Day end reports`;
+  }
+
+  else if (section === 'admin') {
+    text = `<strong>👑 ADMIN COMMANDS</strong>\n\n`;
+
+    text += `<strong>/stats</strong> - View performance stats\n`;
+    text += `<blockquote>Shows wins, losses, accuracy for today/week/month + current streak</blockquote>\n\n`;
+
+    text += `<strong>/broadcast</strong> - Send announcement\n`;
+    text += `<blockquote>Usage: /broadcast Your message here</blockquote>\n`;
+    text += `<code>/broadcast 🎉 Special update!</code>\n`;
+    text += `  ↓ Preview shown\n`;
+    text += `  ↓ Confirm Yes/No\n`;
+    text += `  ↓ Posted to channel!\n\n`;
+
+    text += `<strong>/milestone</strong> - Celebrate milestones\n`;
+    text += `<blockquote>Usage: /milestone 1000 signals</blockquote>\n`;
+    text += `<code>/milestone 500 wins</code>\n`;
+    text += `  ↓ Preview celebration post\n`;
+    text += `  ↓ Confirm Yes/No\n`;
+    text += `  ↓ Posted to channel!\n\n`;
+
+    text += `<strong>/info</strong> - This guide`;
+  }
+
+  else if (section === 'channels') {
+    text = `<strong>📡 CHANNEL CONFIGURATION</strong>\n\n`;
+
+    text += `<strong>Current Setup:</strong>\n`;
+    text += `├ Mode: ${isDev ? '🧪 TEST' : '🔴 PRODUCTION'}\n`;
+    text += `├ Posting to: ${postingChannel}\n`;
+    text += `├ Test Channel: ${testChannel}\n`;
+    text += `└ DB Channel ID: <code>${db.getChannelId()}</code>\n\n`;
+
+    text += `<strong>ℹ️ How it works:</strong>\n`;
+    text += `• All signals & posts go to the "Posting to" channel\n`;
+    text += `• Database stores results linked to DB Channel ID\n`;
+    text += `• Switch modes by editing code (index.ts:67-68)\n\n`;
+
+    text += `<strong>⚠️ To switch modes:</strong>\n`;
+    text += `<code>// Production:\n`;
+    text += `const channelId = db.getChannelId();\n\n`;
+    text += `// Test:\n`;
+    text += `const channelId = Number(process.env.ATOMIX);</code>`;
+  }
+
+  const keyboard: TelegramBot.InlineKeyboardButton[][] = [
+    [
+      { text: section === 'overview' ? '• Overview •' : 'Overview', callback_data: 'info_overview' },
+      { text: section === 'signals' ? '• Signals •' : 'Signals', callback_data: 'info_signals' }
+    ],
+    [
+      { text: section === 'scheduled' ? '• Scheduled •' : 'Scheduled', callback_data: 'info_scheduled' },
+      { text: section === 'admin' ? '• Admin •' : 'Admin', callback_data: 'info_admin' }
+    ],
+    [
+      { text: section === 'channels' ? '• Channels •' : 'Channels', callback_data: 'info_channels' }
+    ],
+    [{ text: '✖ Close', callback_data: 'cancel_op' }]
+  ];
+
+  return { text, keyboard };
+};
+
+bot.onText(/\/info/, async (msg: TelegramBot.Message) => {
+  const chatId = msg.from?.id;
+  const authorized = authorize(chatId as ChatId);
+
+  if (!authorized) {
+    bot.sendMessage(chatId as ChatId, "You are not authorized to use this bot");
+    return;
+  }
+
+  const { text, keyboard } = await buildInfoMessage('overview', chatId as ChatId);
+
+  bot.sendMessage(chatId as ChatId, text, {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: keyboard }
+  });
+});
+
+// Handle info section navigation
+bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
+  const action = callbackQuery.data;
+  const chatId = callbackQuery.message?.chat.id;
+  const messageId = callbackQuery.message?.message_id;
+
+  if (!action?.startsWith("info_")) return;
+
+  const section = action.replace("info_", "");
+  const { text, keyboard } = await buildInfoMessage(section, chatId as ChatId);
+
+  bot.editMessageText(text, {
+    chat_id: chatId,
+    message_id: messageId,
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: keyboard }
+  });
 });
 
 // /broadcast - Send announcements to channel (asks admin first)
@@ -2184,10 +2380,10 @@ bot.on('callback_query', async (callbackQuery: TelegramBot.CallbackQuery) => {
 sessionManager.scheduleClimaxCrons();
 
 app.get("/", (req, res) => {
-    res.send("Halskey v2.5.0 for TWM is running...");
+    res.send("Halskey v2.6.0 for TWM is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey v2.5.0 for TWM is running...");
+    console.log("Halskey v2.6.0 for TWM is running...");
 });
 

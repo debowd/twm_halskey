@@ -5,8 +5,8 @@
   "description": "Halskey TWM is a Telegram bot designed to simplify signal sending, manage signal sessions, create posts with buttons, and schedule posts for channels.",
   "type": "module",
   "scripts": {
-    "dev": "tsx ./src/index.ts",
-    "start": "node ./build/index.js",
+    "dev": "set NODE_ENV=development&& tsx ./src/index.ts",
+    "start": "set NODE_ENV=production&& node ./build/index.js",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
